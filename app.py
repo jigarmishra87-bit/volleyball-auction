@@ -36,7 +36,7 @@ def get_base64(file_path):
         with open(file_path, "rb") as f: return base64.b64encode(f.read()).decode()
     return None
 
-b64 = get_base64("volleyball.webp")
+b64 = get_base64("volleyball.jpg")
 if b64:
     st.markdown(f"""
     <style>
