@@ -1,0 +1,305 @@
+import streamlit as st
+import pandas as pd
+import os
+import base64
+import time
+import threading
+import plotly.express as px
+import urllib.parse
+from streamlit_autorefresh import st_autorefresh
+
+# 🔗 BACKEND CONNECTION
+import db_manager as dbm
+
+st.set_page_config(page_title="Mega Volleyball Auction 2026", layout="wide", page_icon="🏐")
+
+@st.cache_resource
+def get_lock(): return threading.Lock()
+db_lock = get_lock()
+
+DISCORD_LINK = "https://discord.gg/ePnD2Qqkj"
+WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/KTPQNGAMGh065WGJ8LmsYn"
+APP_URL = "https://volleyball-auction.streamlit.app" 
+
+if 'logged_in' not in st.session_state:
+    st.session_state.update({'logged_in': False, 'user_role': None, 'team_name': None})
+
+# 📥 DATA LOAD
+db = dbm.load_db()
+USER_DATA = db["users"]
+players = db["players"]
+teams = [v["team"] for k, v in USER_DATA.items() if k != "Masterji"]
+sold_data = db.get("sold_data", [])
+
+def get_base64(file_path):
+    if os.path.exists(file_path):
+        with open(file_path, "rb") as f: return base64.b64encode(f.read()).decode()
+    return None
+
+# --- 🎨 MAIN CSS DESIGN (Without Photo Frame) ---
+st.markdown("""
+<style>
+.big-title { text-align: center; font-size: 50px !important; font-weight: 900; color: #FFD700; text-transform: uppercase; text-shadow: 3px 3px 6px #000; letter-spacing: 2px; }
+.player-card { background: rgba(25, 25, 25, 0.95); padding: 50px; border-radius: 30px; border: 3px solid #FFD700; backdrop-filter: blur(10px); box-shadow: 0 0 50px rgba(255, 215, 0, 0.2); text-align: center; margin: 10px auto; max-width: 600px; }
+.category-badge { background-color: #FF4500; color: white; padding: 10px 25px; border-radius: 15px; font-weight: bold; font-size: 22px; text-transform: uppercase; display: inline-block; margin-bottom: 15px;}
+</style>
+""", unsafe_allow_html=True)
+
+b64 = get_base64("volleyball.webp")
+if b64:
+    st.markdown(f"<style>.stApp {{ background: linear-gradient(rgba(10,15,20,0.9), rgba(10,15,20,0.9)), url(data:image/webp;base64,{b64}); background-size: cover; background-position: center; background-attachment: fixed; }}</style>", unsafe_allow_html=True)
+
+# --- 1. LOGIN UI ---
+if not st.session_state['logged_in']:
+    st.markdown("<h1 class='big-title'>🏐 AUCTION ARENA LOGIN</h1>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        lc1, lc2 = st.columns(2)
+        lc1.link_button("🎙️ DISCORD", DISCORD_LINK, use_container_width=True)
+        lc2.link_button("💬 WHATSAPP", WHATSAPP_GROUP_LINK, use_container_width=True)
+        
+        st.write("---")
+        st.subheader("🔑 Captains & Masterji Login")
+        with st.form("login_form"):
+            uid = st.text_input("User ID")
+            pwd = st.text_input("Password", type="password")
+            if st.form_submit_button("ENTER ARENA", type="primary", use_container_width=True):
+                if uid in USER_DATA and USER_DATA[uid]["password"] == pwd:
+                    st.session_state.update({'logged_in':True, 'user_role':uid, 'team_name':USER_DATA[uid]["team"]})
+                    st.rerun()
+                else: st.error("❌ Invalid Credentials")
+        
+        st.write("---")
+        st.subheader("👁️ For Audience / Viewers")
+        if st.button("🚀 WATCH LIVE AS GUEST", use_container_width=True, type="secondary"):
+            st.session_state.update({'logged_in':True, 'user_role':'viewer', 'team_name':'👤 LIVE AUDIENCE'})
+            st.rerun()
+    st.stop()
+
+# --- 2. SIDEBAR & REFRESH CONTROL ---
+with st.sidebar:
+    st.markdown(f"### 🚩 {st.session_state['team_name']}")
+    if st.button("LOGOUT"): 
+        st.session_state.update({'logged_in': False, 'user_role': None})
+        st.rerun()
+    st.write("---")
+    is_auto_refresh = st.toggle("🟢 Live Auto-Refresh", value=True)
+
+# 2 SECONDS AUTO REFRESH (2000ms)
+if is_auto_refresh:
+    st_autorefresh(interval=2000, limit=10000, key="data_refresh")
+
+# --- 3. DASHBOARD LOGIC ---
+sold_names = [x["Player"].replace(" (RTM)", "").replace(" (Retained)", "") for x in sold_data]
+while db["player_index"] < len(players) and players[db["player_index"]]["Name"] in sold_names:
+    db["player_index"] += 1
+
+spent = {t: sum(x["Final Points"] for x in sold_data if x["Sold To"] == t) for t in teams}
+purses = {t: dbm.TOTAL_PURSE - spent.get(t, 0) for t in teams}
+
+with st.sidebar:
+    st.link_button("🎤 War Room", DISCORD_LINK, use_container_width=True)
+    if teams and sum(purses.values()) > 0:
+        fig = px.pie(values=list(purses.values()), names=list(purses.keys()), hole=0.6, color_discrete_sequence=px.colors.qualitative.Bold)
+        fig.update_layout(showlegend=False, margin=dict(t=0,b=0,l=0,r=0), paper_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig, use_container_width=True)
+    for t in teams: st.caption(f"{t}: {purses[t]} pts")
+
+st.markdown(f"<p class='big-title'>🏆 AUCTION DASHBOARD 🏆</p>", unsafe_allow_html=True)
+
+if db["player_index"] >= len(players):
+    st.success("🎉 AUCTION COMPLETED!")
+else:
+    current_player = players[db["player_index"]]
+    actual_base = current_player["Base_Points"] // 2 if db.get("round_2") else current_player["Base_Points"]
+    
+    if db["current_team"] != "None":
+        elapsed = time.time() - db.get("last_bid_time", time.time())
+        # 30 SECONDS TIMER Logic
+        time_left = max(0, 30 - int(elapsed))
+        st.markdown(f"<h2 style='text-align: center; color: {'#FF4500' if time_left <= 5 else '#00FA9A'};'>⏳ AUTO-SELL IN: {time_left}s</h2>", unsafe_allow_html=True)
+        if time_left == 0:
+            with db_lock:
+                fdb = dbm.load_db()
+                if fdb["player_index"] == db["player_index"]:
+                    fdb["sold_data"].append({"Player": current_player["Name"], "Sold To": fdb["current_team"], "Final Points": fdb["current_bid"]})
+                    fdb.update({"player_index":fdb["player_index"]+1, "current_bid":0, "current_team":"None", "passed_teams":[], "last_bid_time":time.time()})
+                    dbm.save_db(fdb)
+            st.rerun()
+
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        # NO PHOTO HTML - Only Text & Design
+        p_html = f'<div class="category-badge">{current_player["Role"]}</div><br><h1 style="color:#FFD700; margin-top:10px; font-size:65px;">{current_player["Name"]}</h1><h2 style="color:#00FA9A;">BASE: {actual_base} PTS</h2>'
+        st.markdown(f'<div class="player-card">{p_html}</div>', unsafe_allow_html=True)
+
+    st.write("---")
+    m1, m2, m3 = st.columns(3)
+    m1.metric("HIGHEST BID", f"{db['current_bid']}")
+    m2.metric("CURRENT BIDDER", db["current_team"])
+    m3.metric("YOUR BUDGET", purses.get(st.session_state['team_name'], "0"))
+
+    # --- BIDDING BUTTONS ---
+    if st.session_state['user_role'] not in ["Masterji", "viewer"]:
+        me = st.session_state['team_name']
+        nxt = db["current_bid"] + 100 if db["current_team"] != "None" else actual_base
+        
+        is_highest_bidder = (me == db["current_team"])
+        has_passed = (me in db.get("passed_teams", []))
+        no_budget = (purses.get(me, 0) < nxt)
+        
+        # RTM Usage Status
+        rtm_used_count = db.get("rtm_usage", {}).get(me, 0)
+        can_rtm = (rtm_used_count < 2) and (db["current_team"] not in ["None", me])
+        rtm_label = "🃏 USE RTM" if rtm_used_count == 0 else "🃏 RTM (-8500 Pts)"
+
+        bc1, bc2, bc3 = st.columns(3)
+        with bc1:
+            if st.button(f"🚀 RAISE BID {nxt}", disabled=(no_budget or has_passed or is_highest_bidder), use_container_width=True, type="primary"):
+                with db_lock:
+                    fdb = dbm.load_db()
+                    if fdb["current_bid"] < nxt:  
+                        fdb.update({"current_team":me, "current_bid":nxt, "last_bid_time":time.time(), "passed_teams":[]})
+                        dbm.save_db(fdb)
+                st.rerun()
+        with bc2:
+            # "I'M OUT" BUTTON
+            if st.button("❌ I'm Out", disabled=(has_passed or is_highest_bidder), use_container_width=True):
+                with db_lock:
+                    fdb = dbm.load_db()
+                    if me not in fdb.get("passed_teams", []):
+                        fdb.setdefault("passed_teams", []).append(me)
+                        dbm.save_db(fdb)
+                st.rerun()
+        with bc3:
+            # ADVANCED RTM BUTTON
+            if st.button(rtm_label, disabled=not can_rtm, use_container_width=True):
+                with db_lock:
+                    fdb = dbm.load_db()
+                    if fdb["player_index"] == db["player_index"]:
+                        usage = fdb.get("rtm_usage", {}).get(me, 0)
+                        fdb["sold_data"].append({"Player": current_player["Name"] + " (RTM)", "Sold To": me, "Final Points": fdb["current_bid"]})
+                        
+                        # Apply 8500 Penalty if used 2nd time
+                        if usage == 1:
+                            fdb["sold_data"].append({"Player": "RTM PENALTY CHARGE", "Sold To": me, "Final Points": 8500})
+                            
+                        fdb.setdefault("rtm_usage", {})[me] = usage + 1
+                        fdb.update({"player_index":fdb["player_index"]+1, "current_bid":0, "current_team":"None", "passed_teams":[]})
+                        dbm.save_db(fdb)
+                st.rerun()
+
+# --- 4. MASTERJI COMMAND CENTER ---
+if st.session_state['user_role'] == "Masterji":
+    with st.expander("🛠️ MASTERJI COMMAND CENTER", expanded=True):
+        st.markdown("#### ⚡ Quick Actions")
+        ac1, ac2, ac3 = st.columns(3)
+        with ac1:
+            if st.button("🔨 FORCE SOLD"):
+                with db_lock:
+                    fdb = dbm.load_db()
+                    if fdb["player_index"] == db["player_index"]:
+                        fdb["sold_data"].append({"Player": current_player["Name"], "Sold To": fdb["current_team"], "Final Points": fdb["current_bid"]})
+                        fdb.update({"player_index":fdb["player_index"]+1, "current_bid":0, "current_team":"None", "passed_teams":[]})
+                        dbm.save_db(fdb)
+                st.rerun()
+        with ac2:
+            if st.button("❌ FORCE UNSOLD"):
+                with db_lock:
+                    fdb = dbm.load_db()
+                    if fdb["player_index"] == db["player_index"]:
+                        fdb["sold_data"].append({"Player": current_player["Name"], "Sold To": "UNSOLD", "Final Points": 0})
+                        fdb.update({"player_index":fdb["player_index"]+1, "current_bid":0, "current_team":"None", "passed_teams":[]})
+                        dbm.save_db(fdb)
+                st.rerun()
+        with ac3:
+            if st.button("🔄 EMERGENCY RESET"):
+                with db_lock: dbm.save_db(dbm.get_default_db())
+                st.rerun()
+
+        st.write("---")
+        avail = [p["Name"] for p in players if p["Name"] not in sold_names]
+        st.markdown("#### 🎯 Call Player")
+        call = st.selectbox("Select Player", avail) if avail else None
+        if st.button("📢 BRING TO STAGE", disabled=not avail):
+            if call:
+                idx = next(i for i, p in enumerate(players) if p["Name"] == call)
+                with db_lock:
+                    fdb = dbm.load_db(); fdb.update({"player_index":idx, "current_bid":0, "current_team":"None", "passed_teams":[]}); dbm.save_db(fdb)
+                st.rerun()
+
+        st.write("---")
+        st.markdown("#### ⚙️ Manage Teams")
+        tm1, tm2 = st.columns(2)
+        with tm1:
+            with st.form("add_team"):
+                st.write("**➕ Add New Team**")
+                ni = st.text_input("New ID")
+                np = st.text_input("Password", type="password")
+                nn = st.text_input("Team Name")
+                if st.form_submit_button("Add Team"):
+                    with db_lock:
+                        fdb = dbm.load_db(); fdb["users"][ni] = {"password":np, "team":nn}; dbm.save_db(fdb)
+                    st.rerun()
+        with tm2:
+            with st.form("rem_team"):
+                st.write("**🗑️ Remove Team**")
+                rem_options = [k for k in db["users"] if k != "Masterji"]
+                ri = st.selectbox("Remove Team", rem_options) if rem_options else None
+                if st.form_submit_button("Remove", disabled=not rem_options):
+                    if ri:
+                        with db_lock:
+                            fdb = dbm.load_db(); del fdb["users"][ri]; dbm.save_db(fdb)
+                        st.rerun()
+
+        st.write("---")
+        col_m1, col_m2 = st.columns(2)
+        with col_m1:
+            st.markdown("#### 🤝 Retain Player")
+            ret_player = st.selectbox("Select Player", avail, key="ret_p") if avail else None
+            ret_team = st.selectbox("Retain To", teams) if teams else None
+            ret_price = st.number_input("Retain Price", min_value=0, step=100)
+            if st.button("🤝 Confirm Retain", use_container_width=True, disabled=not (avail and teams)):
+                if ret_player and ret_team:
+                    with db_lock:
+                        fdb = dbm.load_db()
+                        fdb["sold_data"].append({"Player": ret_player + " (Retained)", "Sold To": ret_team, "Final Points": ret_price})
+                        fdb.update({"current_bid":0, "current_team":"None", "passed_teams":[]}); dbm.save_db(fdb)
+                    st.rerun()
+
+        with col_m2:
+            st.markdown("#### 🚫 Mark Unavailable")
+            un_player = st.selectbox("Select Player to Mark", avail, key="un_p") if avail else None
+            if st.button("🚫 Mark as Unavailable", use_container_width=True, disabled=not avail):
+                if un_player:
+                    with db_lock:
+                        fdb = dbm.load_db()
+                        fdb["sold_data"].append({"Player": un_player, "Sold To": "UNAVAILABLE", "Final Points": 0})
+                        if fdb["player_index"] < len(fdb["players"]) and current_player["Name"] == un_player:
+                            fdb.update({"player_index":fdb["player_index"]+1, "current_bid":0, "current_team":"None", "passed_teams":[]})
+                        dbm.save_db(fdb)
+                    st.rerun()
+
+        st.write("---")
+        st.markdown("#### ➕ Add New Player")
+        with st.form("add_player_form"):
+            np_name = st.text_input("Player Name")
+            np_role = st.selectbox("Role", ["OUTSIDE HITTER", "RIGHT SIDE HITTER", "SETTER", "MIDDLE BLOCKER", "LIBERO", "ALL ROUNDER"])
+            np_base = st.number_input("Base Price", min_value=100, step=100, value=500)
+            if st.form_submit_button("➕ Add Player to Draft", type="primary"):
+                if np_name:
+                    with db_lock:
+                        fdb = dbm.load_db()
+                        np_photo = np_name.lower().replace(" ", "") + ".jpg"
+                        fdb["players"].append({"Name": np_name.upper(), "Photo": np_photo, "Role": np_role, "Base_Points": np_base})
+                        dbm.save_db(fdb)
+                    st.rerun()
+
+# --- SQUAD DISPLAY ---
+st.write("---")
+if teams:
+    tabs = st.tabs([f"🛡️ {t}" for t in teams])
+    for i, t in enumerate(teams):
+        with tabs[i]:
+            df = pd.DataFrame([x for x in sold_data if x["Sold To"] == t])
+            if not df.empty: st.dataframe(df, use_container_width=True, hide_index=True)
