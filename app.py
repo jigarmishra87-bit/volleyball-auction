@@ -36,7 +36,7 @@ def get_base64(file_path):
         with open(file_path, "rb") as f: return base64.b64encode(f.read()).decode()
     return None
 
-# --- 🎨 MAIN CSS DESIGN (Hamesha Apply Hoga) ---
+# --- 🎨 MAIN CSS DESIGN ---
 st.markdown("""
 <style>
 .big-title { text-align: center; font-size: 50px !important; font-weight: 900; color: #FFD700; text-transform: uppercase; text-shadow: 3px 3px 6px #000; letter-spacing: 2px; }
@@ -46,7 +46,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 🖼️ BACKGROUND IMAGE (Sirf tab chalega jab image milegi) ---
 b64 = get_base64("volleyball.webp")
 if b64:
     st.markdown(f"<style>.stApp {{ background: linear-gradient(rgba(10,15,20,0.9), rgba(10,15,20,0.9)), url(data:image/webp;base64,{b64}); background-size: cover; background-position: center; background-attachment: fixed; }}</style>", unsafe_allow_html=True)
@@ -78,17 +77,19 @@ if not st.session_state['logged_in']:
             st.rerun()
     st.stop()
 
-# --- 2. AUTO-REFRESH CONTROL ---
+# --- 2. SIDEBAR & REFRESH CONTROL ---
 with st.sidebar:
     st.markdown(f"### 🚩 {st.session_state['team_name']}")
     if st.button("LOGOUT"): 
         st.session_state.update({'logged_in': False, 'user_role': None})
         st.rerun()
     st.write("---")
+    # Switch band karne par form bharna smooth ho jayega
     is_auto_refresh = st.toggle("🟢 Live Auto-Refresh", value=True)
 
+# Refresh interval 3000ms (3s) for better stability
 if is_auto_refresh:
-    st_autorefresh(interval=1500, limit=10000, key="data_refresh")
+    st_autorefresh(interval=3000, limit=10000, key="data_refresh")
 
 # --- 3. DASHBOARD LOGIC ---
 sold_names = [x["Player"].replace(" (RTM)", "").replace(" (Retained)", "") for x in sold_data]
@@ -162,29 +163,25 @@ else:
                     dbm.save_db(fdb)
                 st.rerun()
 
-# --- 4. MASTERJI COMMAND CENTER ---
+# --- 4. MASTERJI COMMAND CENTER (FULL VERSION) ---
 if st.session_state['user_role'] == "Masterji":
     with st.expander("🛠️ MASTERJI COMMAND CENTER", expanded=True):
-        msg = f"🏐 *Auction Alert!* \nJoin Live: {APP_URL}"
-        st.link_button("📢 SEND WHATSAPP NOTIFICATION", f"https://wa.me/?text={urllib.parse.quote(msg)}", use_container_width=True)
-        st.write("---")
-
         st.markdown("#### ⚡ Quick Actions")
         ac1, ac2, ac3 = st.columns(3)
         with ac1:
-            if db["player_index"] < len(players) and st.button("🔨 FORCE SOLD"):
+            if st.button("🔨 FORCE SOLD"):
                 with db_lock:
                     fdb = dbm.load_db(); fdb["sold_data"].append({"Player": current_player["Name"], "Sold To": fdb["current_team"], "Final Points": fdb["current_bid"]})
                     fdb.update({"player_index":fdb["player_index"]+1, "current_bid":0, "current_team":"None"}); dbm.save_db(fdb)
                 st.rerun()
         with ac2:
-            if db["player_index"] < len(players) and st.button("❌ FORCE UNSOLD"):
+            if st.button("❌ FORCE UNSOLD"):
                 with db_lock:
                     fdb = dbm.load_db(); fdb["sold_data"].append({"Player": current_player["Name"], "Sold To": "UNSOLD", "Final Points": 0})
                     fdb.update({"player_index":fdb["player_index"]+1, "current_bid":0, "current_team":"None"}); dbm.save_db(fdb)
                 st.rerun()
         with ac3:
-            if st.button("🔄 EMERGENCY RESET DB", type="primary"):
+            if st.button("🔄 EMERGENCY RESET"):
                 with db_lock: dbm.save_db(dbm.get_default_db())
                 st.rerun()
 
@@ -210,8 +207,7 @@ if st.session_state['user_role'] == "Masterji":
                 nn = st.text_input("Team Name")
                 if st.form_submit_button("Add Team"):
                     with db_lock:
-                        fdb = dbm.load_db(); fdb["users"][ni] = {"password":np, "team":nn}; fdb["rtm_cards"][nn]=True
-                        dbm.save_db(fdb)
+                        fdb = dbm.load_db(); fdb["users"][ni] = {"password":np, "team":nn}; fdb["rtm_cards"][nn]=True; dbm.save_db(fdb)
                     st.rerun()
         with tm2:
             with st.form("rem_team"):
@@ -236,8 +232,7 @@ if st.session_state['user_role'] == "Masterji":
                     with db_lock:
                         fdb = dbm.load_db()
                         fdb["sold_data"].append({"Player": ret_player + " (Retained)", "Sold To": ret_team, "Final Points": ret_price})
-                        fdb.update({"current_bid":0, "current_team":"None"})
-                        dbm.save_db(fdb)
+                        fdb.update({"current_bid":0, "current_team":"None"}); dbm.save_db(fdb)
                     st.rerun()
 
         with col_m2:
@@ -257,7 +252,7 @@ if st.session_state['user_role'] == "Masterji":
         st.markdown("#### ➕ Add New Player")
         with st.form("add_player_form"):
             np_name = st.text_input("Player Name")
-            np_role = st.selectbox("Role", ["OUTSIDE HITTER", "RIGHT SIDE HITTER", "SETTER", "MIDDLE BLOCKER", "LIBERO", "ALL ROUNDER", "SERVICE SPECIALIST"])
+            np_role = st.selectbox("Role", ["OUTSIDE HITTER", "RIGHT SIDE HITTER", "SETTER", "MIDDLE BLOCKER", "LIBERO", "ALL ROUNDER"])
             np_base = st.number_input("Base Price", min_value=100, step=100, value=500)
             if st.form_submit_button("➕ Add Player to Draft", type="primary"):
                 if np_name:
@@ -268,6 +263,7 @@ if st.session_state['user_role'] == "Masterji":
                         dbm.save_db(fdb)
                     st.rerun()
 
+# --- SQUAD DISPLAY ---
 st.write("---")
 if teams:
     tabs = st.tabs([f"🛡️ {t}" for t in teams])
