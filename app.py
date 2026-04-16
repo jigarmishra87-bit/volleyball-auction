@@ -36,19 +36,22 @@ def get_base64(file_path):
         with open(file_path, "rb") as f: return base64.b64encode(f.read()).decode()
     return None
 
+# --- 🎨 MAIN CSS DESIGN (Hamesha Apply Hoga) ---
+st.markdown("""
+<style>
+.big-title { text-align: center; font-size: 50px !important; font-weight: 900; color: #FFD700; text-transform: uppercase; text-shadow: 3px 3px 6px #000; letter-spacing: 2px; }
+.player-card { background: rgba(25, 25, 25, 0.95); padding: 45px; border-radius: 30px; border: 3px solid #FFD700; backdrop-filter: blur(10px); box-shadow: 0 0 50px rgba(255, 215, 0, 0.2); text-align: center; margin: 10px auto; max-width: 600px; }
+.photo-frame { width: 240px; height: 240px; border-radius: 50%; border: 6px solid #FFD700; box-shadow: 0 0 30px rgba(255, 215, 0, 0.5); object-fit: cover; background: #111; margin: 0 auto 20px auto; display: block; }
+.category-badge { background-color: #FF4500; color: white; padding: 10px 25px; border-radius: 15px; font-weight: bold; font-size: 22px; text-transform: uppercase; display: inline-block; }
+</style>
+""", unsafe_allow_html=True)
+
+# --- 🖼️ BACKGROUND IMAGE (Sirf tab chalega jab image milegi) ---
 b64 = get_base64("volleyball.webp")
 if b64:
-    st.markdown(f"""
-    <style>
-    .stApp {{ background: linear-gradient(rgba(10, 15, 20, 0.9), rgba(10, 15, 20, 0.9)), url(data:image/webp;base64,{b64}); background-size: cover; background-position: center; background-attachment: fixed; }}
-    .big-title {{ text-align: center; font-size: 50px !important; font-weight: 900; color: #FFD700; text-transform: uppercase; text-shadow: 3px 3px 6px #000; letter-spacing: 2px; }}
-    .player-card {{ background: rgba(25, 25, 25, 0.95); padding: 45px; border-radius: 30px; border: 3px solid #FFD700; backdrop-filter: blur(10px); box-shadow: 0 0 50px rgba(255, 215, 0, 0.2); text-align: center; margin: 10px auto; max-width: 600px; }}
-    .photo-frame {{ width: 240px; height: 240px; border-radius: 50%; border: 6px solid #FFD700; box-shadow: 0 0 30px rgba(255, 215, 0, 0.5); object-fit: cover; background: #111; margin: 0 auto 20px auto; display: block; }}
-    .category-badge {{ background-color: #FF4500; color: white; padding: 10px 25px; border-radius: 15px; font-weight: bold; font-size: 22px; text-transform: uppercase; display: inline-block; }}
-    </style>
-    """, unsafe_allow_html=True)
+    st.markdown(f"<style>.stApp {{ background: linear-gradient(rgba(10,15,20,0.9), rgba(10,15,20,0.9)), url(data:image/webp;base64,{b64}); background-size: cover; background-position: center; background-attachment: fixed; }}</style>", unsafe_allow_html=True)
 
-# --- LOGIN UI ---
+# --- 1. LOGIN UI ---
 if not st.session_state['logged_in']:
     st.markdown("<h1 class='big-title'>🏐 AUCTION ARENA LOGIN</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1,2,1])
@@ -56,51 +59,53 @@ if not st.session_state['logged_in']:
         lc1, lc2 = st.columns(2)
         lc1.link_button("🎙️ DISCORD", DISCORD_LINK, use_container_width=True)
         lc2.link_button("💬 WHATSAPP", WHATSAPP_GROUP_LINK, use_container_width=True)
+        
+        st.write("---")
+        st.subheader("🔑 Captains & Masterji Login")
         with st.form("login_form"):
             uid = st.text_input("User ID")
             pwd = st.text_input("Password", type="password")
-            if st.form_submit_button("ENTER ARENA", type="primary"):
+            if st.form_submit_button("ENTER ARENA", type="primary", use_container_width=True):
                 if uid in USER_DATA and USER_DATA[uid]["password"] == pwd:
                     st.session_state.update({'logged_in':True, 'user_role':uid, 'team_name':USER_DATA[uid]["team"]})
                     st.rerun()
                 else: st.error("❌ Invalid Credentials")
-        st.markdown("---")
-        if st.button("👁️ WATCH LIVE AS GUEST", use_container_width=True):
+        
+        st.write("---")
+        st.subheader("👁️ For Audience / Viewers")
+        if st.button("🚀 WATCH LIVE AS GUEST", use_container_width=True, type="secondary"):
             st.session_state.update({'logged_in':True, 'user_role':'viewer', 'team_name':'👤 LIVE AUDIENCE'})
             st.rerun()
     st.stop()
 
-# --- SIDEBAR & REFRESH CONTROL ---
-spent = {t: sum(x["Final Points"] for x in sold_data if x["Sold To"] == t) for t in teams}
-purses = {t: dbm.TOTAL_PURSE - spent.get(t, 0) for t in teams}
-
+# --- 2. AUTO-REFRESH CONTROL ---
 with st.sidebar:
     st.markdown(f"### 🚩 {st.session_state['team_name']}")
-    if st.button("LOGOUT"): st.session_state['logged_in'] = False; st.rerun()
+    if st.button("LOGOUT"): 
+        st.session_state.update({'logged_in': False, 'user_role': None})
+        st.rerun()
     st.write("---")
-    
-    # MASTER SWITCH (Form bharte waqt band kar dein)
     is_auto_refresh = st.toggle("🟢 Live Auto-Refresh", value=True)
-    
-    st.write("---")
-    st.link_button("🎤 Join War Room", DISCORD_LINK, use_container_width=True)
-    st.link_button("💬 Join Group", WHATSAPP_GROUP_LINK, use_container_width=True)
-    st.write("---")
-    if teams and sum(purses.values()) > 0:
-        fig = px.pie(values=list(purses.values()), names=list(purses.keys()), hole=0.6, color_discrete_sequence=px.colors.qualitative.Bold)
-        fig.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig, use_container_width=True)
-    for t in teams: st.caption(f"{t}: {purses[t]} pts")
 
-# ⚡ AUTO-REFRESH (Only if Toggled ON)
-if st.session_state['logged_in'] and is_auto_refresh:
+if is_auto_refresh:
     st_autorefresh(interval=1500, limit=10000, key="data_refresh")
 
+# --- 3. DASHBOARD LOGIC ---
 sold_names = [x["Player"].replace(" (RTM)", "").replace(" (Retained)", "") for x in sold_data]
 while db["player_index"] < len(players) and players[db["player_index"]]["Name"] in sold_names:
     db["player_index"] += 1
 
-# --- MAIN ARENA ---
+spent = {t: sum(x["Final Points"] for x in sold_data if x["Sold To"] == t) for t in teams}
+purses = {t: dbm.TOTAL_PURSE - spent.get(t, 0) for t in teams}
+
+with st.sidebar:
+    st.link_button("🎤 War Room", DISCORD_LINK, use_container_width=True)
+    if teams and sum(purses.values()) > 0:
+        fig = px.pie(values=list(purses.values()), names=list(purses.keys()), hole=0.6, color_discrete_sequence=px.colors.qualitative.Bold)
+        fig.update_layout(showlegend=False, margin=dict(t=0,b=0,l=0,r=0), paper_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig, use_container_width=True)
+    for t in teams: st.caption(f"{t}: {purses[t]} pts")
+
 st.markdown(f"<p class='big-title'>🏆 AUCTION DASHBOARD 🏆</p>", unsafe_allow_html=True)
 
 if db["player_index"] >= len(players):
@@ -127,7 +132,6 @@ else:
         p_html = f'<img src="data:image/jpeg;base64,{p_img_b64}" class="photo-frame">' if p_img_b64 else '<div class="photo-frame" style="display:flex; align-items:center; justify-content:center; font-size:100px;">🏐</div>'
         st.markdown(f'<div class="player-card">{p_html}<span class="category-badge">{current_player["Role"]}</span><h1 style="color:#FFD700; margin-top:20px; font-size:60px;">{current_player["Name"]}</h1><h2 style="color:#00FA9A;">BASE: {actual_base} PTS</h2></div>', unsafe_allow_html=True)
 
-    # 3 COLUMNS ONLY (Viewers Removed)
     st.write("---")
     m1, m2, m3 = st.columns(3)
     m1.metric("HIGHEST BID", f"{db['current_bid']}")
@@ -158,13 +162,13 @@ else:
                     dbm.save_db(fdb)
                 st.rerun()
 
-# --- COMMAND CENTER ---
+# --- 4. MASTERJI COMMAND CENTER ---
 if st.session_state['user_role'] == "Masterji":
     with st.expander("🛠️ MASTERJI COMMAND CENTER", expanded=True):
         msg = f"🏐 *Auction Alert!* \nJoin Live: {APP_URL}"
         st.link_button("📢 SEND WHATSAPP NOTIFICATION", f"https://wa.me/?text={urllib.parse.quote(msg)}", use_container_width=True)
         st.write("---")
-        
+
         st.markdown("#### ⚡ Quick Actions")
         ac1, ac2, ac3 = st.columns(3)
         with ac1:
