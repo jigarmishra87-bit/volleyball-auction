@@ -10,7 +10,7 @@ DEFAULT_USER_DATA = {"Masterji": {"password": "Mishraji041411", "team": "👑 AD
 
 DEFAULT_PLAYERS = [
     {"Name": "GOLU", "Photo": "golu.jpg", "Role": "OUTSIDE HITTER", "Base_Points": 900},
-    {"Name": "SIDHU", "Photo": "sidhu.jpg", "Role": "SETTER", "Base_Points": 2000},
+    {"Name": "SIDHU", "Photo": "sidhu.jpg", "Role": "ATTACKER", "Base_Points": 2000},
     {"Name": "MITHU", "Photo": "mithu.jpg", "Role": "MIDDLE BLOCKER", "Base_Points": 2000},
     {"Name": "ABHISHEK", "Photo": "abhishek.jpg", "Role": "LIBERO", "Base_Points": 1600},
     {"Name": "ROHIT", "Photo": "rohit.jpg", "Role": "ALL ROUNDER", "Base_Points": 1600},
@@ -35,7 +35,7 @@ DEFAULT_PLAYERS = [
     {"Name": "AYUSH", "Photo": "ayush.jpg", "Role": "MIDDLE BLOCKER", "Base_Points": 1750},
     {"Name": "PRITHVI", "Photo": "prithvi.jpg", "Role": "OUTSIDE HITTER", "Base_Points": 900},
     {"Name": "SHRESHTH", "Photo": "shreshth.jpg", "Role": "OUTSIDE HITTER", "Base_Points": 1000},
-    {"Name": "ABHINAV", "Photo": "abhinav.jpg", "Role": "LIBERO", "Base_Points": 2000}
+    {"Name": "ABHINAV", "Photo": "abhinav.jpg", "Role": "ALL ROUNDER", "Base_Points": 2000}
 ]
 
 # --- DATABASE FUNCTIONS ---
